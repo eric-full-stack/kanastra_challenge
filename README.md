@@ -9,6 +9,8 @@ Para inserir em batches de 5k linhas no banco de dados utilizei SQL Bulk Insert 
 
 - **Regras e Validações:** Como cada linha do csv possuem dados do customer e muitas vezes repetidas, criei uma tabela customers e deduzi que o campo government_id é um identificador único para cada customer. Então, criei uma regra no banco de dados para garantir que o government_id seja único. Porém, a verificação de duplicidade em cada tentativa de inserção de um customer é custosa, então optei por fazer a inserção usando INSERT IGNORE, que ignora a tentativa de inserção de um customer que já existe no banco de dados. O processamento dos customers são feitos a parte do processamento das charges, para garantir que os customers estejam disponíveis para serem relacionados com as charges.
 
+Para a verificação de envios de e-mails e boletos, criei uma coluna status e timestamps de envio de e-mail e boleto. A cada tentativa de envio de e-mail ou boleto, verifico se o status é pending e se o timestamp de envio é nulo. Se sim, envio o e-mail ou boleto e atualizo o status e o timestamp de envio. Se não, não faço nada.
+
 - **Conclusão:** Com as abordagens acima, consegui processar o arquivo de 1.1M de linhas em média de 45s, dependendo do computador que está rodando o projeto. Apesar da abordagem de processamento síncrono ser mais rápida localmente por N motivos, creio que a abordagem por filas com vários workers em um servidor dedicado poderia ser mais eficiente e robusta, pois o processamento seria distribuído e poderia ser escalado de acordo com a demanda.
 
 
@@ -29,7 +31,7 @@ Para inserir em batches de 5k linhas no banco de dados utilizei SQL Bulk Insert 
 
 3. **Instale as dependências do Composer:**
    ```sh
-   ./vendor/bin/sail composer install
+   docker run --rm -v $(pwd):/opt -w /opt laravelsail/php83-composer:latest composer install
    ```
 
 4. **Suba os containers Docker:**
@@ -53,12 +55,25 @@ Para executar workers na fila `charges`, utilize o comando abaixo:
 ./vendor/bin/sail artisan queue:work --queue=charges
 ```
 
+Este comando irá processar a geração de boletos e envio de e-mails para as charges com status `pending` que estão na fila `charges`.
+
 ## Executando o scheduler
 
 Para executar o scheduler, utilize o comando abaixo:
 
 ```sh
 ./vendor/bin/sail artisan schedule:work
+```
+
+## Executando o Processamento do CSV
+
+Para processar o arquivo CSV, faça uma chamada para a rota `http://localhost:80/api/charges/csv-import` via POST, passando o arquivo CSV no campo `file`.
+
+```sh	
+curl --request POST \
+  --url http://localhost:80/api/charges/csv-import \
+  --header 'Content-Type: multipart/form-data' \
+  --form 'file=@C:\input.csv'
 ```
 
 ## Comandos Úteis
